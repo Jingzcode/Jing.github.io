@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://cdn.jsdelivr.net/npm/vega@5.25.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vega-lite@5.12.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vega-embed@6.22.1"></script>
+</head>
+<body>
+  <div id="vis"/>
+  <script>
+    const spec = {
+  "$schema": "https://vega.github.io/schema/vega/v5.json",
+  "description": "A scatter plot example with interactive legend and x-axis.",
+  "width": 200,
+  "height": 200,
+  "padding": 5,
+  "autosize": "pad",
+  "signals": [
+    {"name": "tx", "update": "width / 2"},
+    {"name": "ty", "update": "height / 2"},
+    {
+      "name": "angles",
+      "value": [0, 0],
+      "on": [{"events": "mousedown", "update": "[rotateX, centerY]"}]
+    },
+    {
+      "name": "scale",
+      "value": 150,
+      "on": [
+        {
+          "events": {"type": "wheel", "consume": true},
+          "update": "clamp(scale * pow(1.0005, -event.deltaY * pow(16, event.deltaMode)), 150, 3000)"
+        }
+      ]
+    },
+    {
+      "name": "rotateX",
+      "value": 0,
+      "on": [
+        {"events": {"signal": "delta1"}, "update": "angles[0] + delta1[0]"}
+      ]
+    },
+    {
+      "name": "centerY",
+      "value": 0,
+      "on": [
+        {
+          "events": {"signal": "delta1"},
+          "update": "clamp(angles[1] + delta1[1], -60, 60)"
+        }
+      ]
+    },
+    {
+      "name": "clear",
+      "value": true,
+      "on": [
+        {"events": "mouseup[!event.item]", "update": "true", "force": true}
+      ]
+    },
+    {
+      "name": "shift",
+      "value": false,
+      "on": [
+        {
+          "events": "@legendSymbol:click, @legendLabel:click",
+          "update": "event.shiftKey",
+          "force": true
+        }
+      ]
+    },
+    {
+      "name": "clicked",
+      "value": null,
+      "on": [
+        {
+          "events": "@legendSymbol:click, @legendLabel:click",
+          "update": "{value: datum.value}",
+          "force": true
+        }
+      ]
+    },
+    {
+      "name": "brush",
+      "value": 0,
+      "on": [
+        {"events": {"signal": "clear"}, "update": "clear ? [0, 0] : brush"},
+        {"events": "@xaxis:mousedown", "update": "[x(), x()]"},
+        {
+          "events": "[@xaxis:mousedown, window:mouseup] > window:mousemove!",
+          "update": "[brush[0], clamp(x(), 0, width)]"
+        },
+        {
+          "events": {"signal": "delta"},
+          "update": "clampRange([anchor[0] + delta, anchor[1] + delta], 0, width)"
+        }
+      ]
+    },
+    {
+      "name": "anchor",
+      "value": null,
+      "on": [{"events": "@brush:mousedown", "update": "slice(brush)"}]
+    },
+    {
+      "name": "xdown",
+      "value": 0,
+      "on": [{"events": "@brush:mousedown", "update": "x()"}]
+    },
+    {
+      "name": "delta",
+      "value": 0,
+      "on": [
+        {
+          "events": "[@brush:mousedown, window:mouseup] > window:mousemove!",
+          "update": "x() - xdown"
+        }
+      ]
+    },
+    {
+      "name": "domain",
+      "on": [
+        {
+          "events": {"signal": "brush"},
+          "update": "span(brush) ? invert('x', brush) : null"
+        }
+      ]
+    },
+    {
+      "name": "start",
+      "value": null,
+      "on": [{"events": "mousedown", "update": "invert(cloned, xy())"}]
+    },
+    {
+      "name": "drag",
+      "value": null,
+      "on": [
+        {
+          "events": "[mousedown, window:mouseup] > window:mousemove",
+          "update": "invert(cloned, xy())"
+        }
+      ]
+    },
+    {
+      "name": "cloned",
+      "value": null,
+      "on": [{"events": "mousedown", "update": "copy('projection')"}]
+    },
+    {
+      "name": "delta1",
+      "value": null,
+      "on": [
+        {
+          "events": {"signal": "drag"},
+          "update": "[drag[0] - start[0], start[1] - drag[1]]"
+        }
+      ]
+    }
+  ],
+  "projections": [
+    {
+      "name": "projection",
+      "type": "wagner6",
+      "scale": {"signal": "scale"},
+      "rotate": [{"signal": "rotateX"}, 0, 0],
+      "center": [0, {"signal": "centerY"}],
+      "translate": [{"signal": "tx"}, {"signal": "ty"}]
+    }
+  ],
+  "data": [
+    {
+      "name": "source",
+      "url": "https://gist.githubusercontent.com/Jingzcode/56fb1d3a4fbb2d5009292415d96a2274/raw/a76b5841553ff1ca8d22fe6e58b48fbe5171fc94/1212.csv",
+      "format": {"type": "csv", "parse": "auto", "delimiter": ","},
+      "transform": [
+        {"type": "filter", "expr": "datum.n!= 'NA'"},
+        {"type": "formula", "as": "n_num", "expr": "toNumber(datum.n)"}
+      ]
+    },
+    {
+      "name": "selected",
+      "on": [
+        {"trigger": "clear", "remove": true},
+        {"trigger": "!shift", "remove": true},
+        {"trigger": "!shift && clicked", "insert": "clicked"},
+        {"trigger": "shift && clicked", "toggle": "clicked"}
+      ]
+    },
+    {
+      "name": "world",
+      "url": "data/world-110m.json",
+      "format": {"type": "topojson", "feature": "countries"}
+    },
+    {
+      "name": "world_0",
+      "url": "data/world-110m.json",
+      "format": {"type": "topojson", "feature": "countries"},
+      "transform": [
+        {
+          "type": "lookup",
+          "from": "source",
+          "key": "id",
+          "fields": ["id"],
+          "values": ["n_num", "name", "prev"]
+        }
+      ]
+    },
+    {
+      "name": "world_1",
+      "url": "https://gist.githubusercontent.com/Jingzcode/56fb1d3a4fbb2d5009292415d96a2274/raw/a76b5841553ff1ca8d22fe6e58b48fbe5171fc94/1212.csv",
+      "format": {"type": "csv", "parse": "auto", "delimiter": ","},
+      "transform": [
+        {
+          "type": "lookup",
+          "from": "world",
+          "key": "id",
+          "fields": ["id"],
+          "values": ["type", "properties", "geometry"]
+        },
+        {"type": "filter", "expr": "datum.n!= 'NA'"},
+        {"type": "formula", "as": "n_num", "expr": "toNumber(datum.n)"},
+        {"type": "filter", "expr": " indata('selected','value', datum.prev)"}
+      ]
+    },
+    {
+      "name": "graticule",
+      "transform": [{"type": "graticule", "step": [15, 15]}]
+    }
+  ],
+  "scales": [
+    {
+      "name": "fill",
+      "type": "quantize",
+      "domain": {"data": "world_1", "field": "n_num"},
+      "range": {"scheme": "darkblue"},
+      "reverse": true,
+      "zero": true
+    },
+    {
+      "name": "fill_grey",
+      "type": "quantize",
+      "domain": {"data": "world_1", "field": "n_num"},
+      "range": {"scheme": "warmgreys"},
+      "reverse": false,
+      "zero": true
+    },
+    {
+      "name": "color",
+      "type": "ordinal",
+      "range": {"scheme": "category10"},
+      "domain": {"data": "source", "field": "prev"}
+    }
+  ],
+  "legends": [
+    {
+      "stroke": "color",
+      "title": "cSVD lesions",
+      "orient": "bottom",
+      "direction": "horizontal",
+      "clipHeight": 10,
+      "padding": 200,
+      "encode": {
+        "symbols": {
+          "name": "legendSymbol",
+          "interactive": true,
+          "update": {
+            "fill": {"value": "fill"},
+            "strokeWidth": {"value": 2},
+            "opacity": [
+              {
+                "test": "!length(data('selected')) || indata('selected', 'value', datum.value)",
+                "value": 0.7
+              },
+              {"value": 0.15}
+            ],
+            "size": {"value": 32}
+          }
+        },
+        "labels": {
+          "name": "legendLabel",
+          "interactive": true,
+          "update": {
+            "opacity": [
+              {
+                "test": "!length(data('selected')) || indata('selected', 'value', datum.value)",
+                "value": 1
+              },
+              {"value": 0.25}
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "marks": [
+    {
+      "type": "shape",
+      "from": {"data": "graticule"},
+      "encode": {
+        "enter": {
+          "strokeWidth": {"value": 1},
+          "stroke": {"value": "#ddd"},
+          "fill": {"value": null}
+        }
+      },
+      "transform": [{"type": "geoshape", "projection": "projection"}]
+    },
+    {
+      "type": "shape",
+      "from": {"data": "world_0"},
+      "encode": {
+        "enter": {"strokeWidth": {"value": 0.5}, "stroke": {"value": "#bbb"}}
+      },
+      "transform": [{"type": "geoshape", "projection": "projection"}]
+    },
+    {
+      "type": "shape",
+      "from": {"data": "world_0"},
+      "encode": {
+        "enter": {
+          "strokeWidth": {"value": 0.5},
+          "stroke": {"value": "#bbb"},
+          "fill": {"scale": "fill_grey", "field": "n_num"}
+        }
+      },
+      "transform": [{"type": "geoshape", "projection": "projection"}]
+    },
+    {
+      "name": "marks",
+      "type": "shape",
+      "from": {"data": "world_1"},
+      "encode": {
+        "enter": {
+          "tooltip": {
+            "signal": "{'title':datum.name, 'prevlance':datum.n_num,'sample size': datum.sample_size,'number of studies': datum.number_studies}"
+          },
+          "strokeWidth": {"value": 0.5},
+          "stroke": {"value": "#bbb"},
+          "fill": {"scale": "fill", "field": "n_num"}
+        }
+      },
+      "transform": [{"type": "geoshape", "projection": "projection"}]
+    }
+  ],
+  "config": {}
+};
+    vegaEmbed("#vis", spec, {mode: "vega"}).then(console.log).catch(console.warn);
+  </script>
+</body>
+</html>
